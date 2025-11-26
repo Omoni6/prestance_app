@@ -1,0 +1,26 @@
+node_modules/
+.next/
+build/
+dist/
+.vercel/
+coverage/
+*.tsbuildinfo
+.DS_Store
+*.pem
+*.log
+
+# Env files
+.env*
+frontend/.env*
+backend/.env*
+
+# Frontend caches
+frontend/.next/
+frontend/out/
+
+# Backend build
+backend/build/
+
+# Editor
+.vscode/
+*.swp
