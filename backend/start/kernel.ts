@@ -47,4 +47,12 @@ export const middleware = router.named({
   } catch (err) {
     console.error('DB overview failed', err)
   }
+  try {
+    const { default: CronService } = await import('#services/cron_service')
+    const cron = new CronService()
+    await cron.start()
+    console.info('⏱️ Cron service started')
+  } catch (err) {
+    console.error('Cron service failed to start', err)
+  }
 })()

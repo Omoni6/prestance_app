@@ -35,5 +35,8 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column({ columnName: 'onboarding_completed' })
   declare onboardingCompleted: boolean | null
 
+  @column({ columnName: 'avatar_url' })
+  declare avatarUrl: string | null
+
   static accessTokens = DbAccessTokensProvider.forModel(User)
 }

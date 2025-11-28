@@ -1,4 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
+import User from '#models/user'
 
 export default class ProfileController {
   public async show({ auth, response }: HttpContext) {
@@ -24,11 +25,12 @@ export default class ProfileController {
   public async updateAvatar({ auth, request, response }: HttpContext) {
     try {
       const user = await auth.use('api').authenticate()
-      const avatarUrl = request.input('avatarUrl')
+      const avatarUrl = String(request.input('avatarUrl') || '')
+      if (!avatarUrl) return response.badRequest({ error: 'avatar_url_required' })
+      await User.query().where('id', user.id).update({ avatarUrl })
       return response.ok({ success: true, user: { id: user.id, avatarUrl } })
     } catch {
       return response.unauthorized({ error: 'unauthenticated' })
     }
   }
 }
-

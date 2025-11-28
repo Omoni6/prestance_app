@@ -91,10 +91,10 @@ export default class ModuleService {
 
     // Fallback mapping when database lacks module_connector entries
     const defaults: Record<string, { included: string[]; premium: string[] }> = {
-      planifi: { included: ['omoni_calendar','telegram','slack'], premium: ['gmail','calendly','smtp','google_calendar'] },
-      cree: { included: ['omoni_bucket','telegram','slack','nano_banana','sora2'], premium: ['suno','elevenlabs','notion','canva'] },
-      publie: { included: ['omoni_bucket','blotato'], premium: ['ticketmaster','n8n','spotify'] },
-      commercial: { included: ['omoni_crm','telegram','slack','omoni_calendar','hubspot'], premium: ['salesforce','whatsapp_business','twilio','lemonsqueezy'] },
+      planifi: { included: ['omoni_calendar','telegram','slack'], premium: ['gmail','calendly','smtp','google_calendar','google_drive'] },
+      cree: { included: ['omoni_bucket','telegram','slack','nano_banana','sora2'], premium: ['suno','elevenlabs','notion','canva','google_drive'] },
+      publie: { included: ['omoni_bucket','blotato'], premium: ['ticketmaster','n8n','spotify','google_drive'] },
+      commercial: { included: ['omoni_crm','telegram','slack','omoni_calendar','hubspot','google_drive'], premium: ['salesforce','whatsapp_business','twilio','lemonsqueezy','google_drive'] },
     }
     for (const key of Object.keys(defaults)) {
       if (!grouped[key]) grouped[key] = { included: [], premium: [] }

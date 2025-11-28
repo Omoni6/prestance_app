@@ -38,4 +38,13 @@ export default class MinioService {
     const url = `${proto}://${env('MINIO_ENDPOINT', '127.0.0.1')}:${env('MINIO_PORT', '9000')}/${this.bucket}/${key}`
     return { key, url }
   }
+
+  async removeFile(key: string) {
+    try {
+      await this.client.removeObject(this.bucket, key)
+      return { success: true }
+    } catch {
+      return { success: false }
+    }
+  }
 }
