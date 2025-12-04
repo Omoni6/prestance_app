@@ -23,14 +23,10 @@ function parseEnvFile(p) {
   }
 }
 
-function cfg(obj) {
-  return {
-    host: obj.PG_HOST,
-    port: obj.PG_PORT || '5432',
-    user: obj.PG_USER,
-    password: obj.PG_PASSWORD,
-    db: obj.PG_DB_NAME || obj.PG_DB,
-  }
+function parseDatabaseUrl(url) {
+  const m = url.match(/^postgres:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^\s]+)$/)
+  if (!m) throw new Error('Invalid DATABASE_URL format')
+  return { user: m[1], password: m[2], host: m[3], port: m[4], db: m[5] }
 }
 
 function run(cmd, args, env) {
@@ -42,21 +38,13 @@ function run(cmd, args, env) {
 
 async function main() {
   const base = new URL('../', import.meta.url)
-  const envLocal = parseEnvFile(join(base.pathname, '.env'))
-  const envProd = parseEnvFile(join(base.pathname, '.env.production'))
-  const local = cfg(envLocal)
-  const vps = cfg(envProd)
+  const envVars = parseEnvFile(join(base.pathname, '.env'))
+  if (!envVars.DATABASE_URL) throw new Error('DATABASE_URL must be defined. No fallback allowed.')
+  const vps = parseDatabaseUrl(envVars.DATABASE_URL)
   if (!existsSync(join(base.pathname, 'tmp'))) mkdirSync(join(base.pathname, 'tmp'))
   const dumpPath = join(base.pathname, 'tmp', 'local_dump.dump')
-  console.log('⏳ Dump local en cours…')
-  const dumpCode = await run('pg_dump', ['-h', local.host || 'localhost', '-p', local.port || '5432', '-U', local.user, '-d', local.db, '-Fc', '-f', dumpPath], {
-    PGPASSWORD: local.password,
-  })
-  if (dumpCode !== 0) {
-    console.log('❌ Erreur pg_dump (local). Assurez-vous que pg_dump est installé et accessible.')
-    process.exit(1)
-  }
-  console.log('📤 Push vers VPS…')
+  console.log('⏳ Dump indisponible (aucune base locale autorisée)')
+  console.log('📤 Import vers VPS à partir d\'un dump fourni (AJOUTEZ LE CHEMIN SI NÉCESSAIRE)')
   const restoreCode = await run('pg_restore', ['-h', vps.host, '-p', vps.port || '5432', '-U', vps.user, '-d', vps.db, '--clean', '--if-exists', dumpPath], {
     PGPASSWORD: vps.password,
   })

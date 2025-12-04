@@ -38,5 +38,8 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column({ columnName: 'avatar_url' })
   declare avatarUrl: string | null
 
+  @column({ columnName: 'notifications_enabled' })
+  declare notificationsEnabled: boolean | null
+
   static accessTokens = DbAccessTokensProvider.forModel(User)
 }

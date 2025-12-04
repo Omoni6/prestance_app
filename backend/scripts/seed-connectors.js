@@ -1,14 +1,15 @@
 import { Client } from 'pg'
 
 const codes = [
-  'omoni_calendar','telegram','slack','gmail','calendly','smtp','google_calendar',
+  'omoni_calendar','telegram','slack','gmail','calendly','smtp','google_calendar','google_meet',
   'omoni_bucket','nano_banana','sora2','suno','elevenlabs','notion','canva','google_drive',
   'blotato','ticketmaster','n8n','spotify',
   'omoni_crm','hubspot','salesforce','whatsapp_business','twilio','lemonsqueezy'
 ]
 
 async function main() {
-  const client = new Client(process.env.DATABASE_URL ? { connectionString: process.env.DATABASE_URL } : undefined)
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must be defined. No fallback allowed.')
+  const client = new Client({ connectionString: process.env.DATABASE_URL })
   await client.connect()
   for (const code of codes) {
     try {

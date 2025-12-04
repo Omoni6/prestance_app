@@ -7,7 +7,7 @@ function env(key, fallback) {
 
 async function main() {
   const client = new Client({
-    endPoint: env('MINIO_ENDPOINT', '127.0.0.1'),
+    endPoint: env('MINIO_ENDPOINT', 'localhost'),
     port: Number(env('MINIO_PORT', '9000')),
     useSSL: env('MINIO_USE_SSL', 'false') === 'true',
     accessKey: env('MINIO_ACCESS_KEY', ''),
@@ -26,4 +26,3 @@ async function main() {
 }
 
 main()
-

@@ -1,0 +1,17 @@
+{
+  "user": {
+    "id": "",
+    "email": "",
+    "name": ""
+  },
+  "modules": ["planifi", "cree", "publie", "commercial"],
+  "connectors": {
+    "included": [],
+    "premium": []
+  },
+  "preferences": {
+    "language": "fr-FR",
+    "style": "classe_vivante"
+  }
+}
+

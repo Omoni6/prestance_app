@@ -77,4 +77,23 @@ export default class AdminController {
       return response.ok({ endpoints })
     } catch { return response.unauthorized({ error: 'unauthenticated' }) }
   }
+
+  public async connectorsStatus({ auth, response }: HttpContext) {
+    try {
+      const user = await auth.use('api').authenticate()
+      const connectors = await db.from('connectors').select('code').orderBy('code', 'asc').catch(() => [])
+      const cons = await db.from('user_connectors').where({ user_id: user.id }).select('connector_code').catch(() => [])
+      const creds = await db.from('user_connector_credentials').where({ user_id: user.id }).select('connector_code', 'extra_json').catch(() => [])
+      const cset = new Set<string>(cons.map((r: any) => String(r.connector_code)))
+      const cmap = new Map<string, any>(creds.map((r: any) => [String(r.connector_code), r.extra_json || {}]))
+      const list = connectors.map((c: any) => {
+        const code = String(c.code)
+        const connected = cset.has(code)
+        const extra = cmap.get(code) || {}
+        const scopes = Array.isArray(extra.scopes) ? extra.scopes : (typeof extra.scope === 'string' ? extra.scope.split(',').map((s: string) => s.trim()).filter(Boolean) : [])
+        return { code, connected, scopes }
+      })
+      return response.ok({ connectors: list })
+    } catch { return response.unauthorized({ error: 'unauthenticated' }) }
+  }
 }

@@ -33,6 +33,10 @@ new Ignitor(APP_ROOT, { importer: IMPORTER })
   .tap((app) => {
     app.booting(async () => {
       await import('#start/env')
+      const { ensureAbilitiesColumnIsText } = await import('#start/db_patch_abilities')
+      await ensureAbilitiesColumnIsText()
+      const { ensureUsersTableColumns } = await import('#start/db_patch_users')
+      await ensureUsersTableColumns()
     })
     app.listen('SIGTERM', () => app.terminate())
     app.listenIf(app.managedByPm2, 'SIGINT', () => app.terminate())

@@ -11,17 +11,17 @@ export default class DonnaController {
       if (!text) return response.badRequest({ error: 'message_required' })
       const sys = String(Env.get('DONNA_SYSTEM_PROMPT') || '')
       const instructions = String(request.input('instructions') || sys || 'Tu es Donna, assistant utile et fiable. Réponds de manière concise et actionnable.')
-      const payload = {
-        model: 'gpt-4o-mini',
-        input: [
-          { role: 'system', content: instructions },
-          { role: 'user', content: text },
-        ],
-      }
-      const resp = await fetch('https://api.openai.com/v1/responses', {
+      const conv = Array.isArray(request.input('conversation')) ? request.input('conversation') : []
+      const input = [
+        { role: 'system', content: instructions },
+        ...conv.slice(-8).map((m: any) => ({ role: String(m.role || 'user'), content: String(m.content || '') })),
+        { role: 'user', content: text },
+      ]
+      const messages = input.map((m: any) => ({ role: m.role, content: m.content }))
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ model: 'gpt-4o-mini', messages, temperature: 0.7 })
       })
       if (!resp.ok) {
         const txt = await resp.text()
@@ -29,7 +29,7 @@ export default class DonnaController {
         return response.ok({ reply: fallback, error: 'openai_error', detail: txt })
       }
       const data: any = await resp.json()
-      const out = String(data?.output_text || data?.choices?.[0]?.message?.content || '')
+      const out = String(data?.choices?.[0]?.message?.content || '')
       return response.ok({ reply: out })
     } catch (err) {
       return response.unauthorized({ error: 'unauthenticated' })

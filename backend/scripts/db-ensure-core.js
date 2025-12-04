@@ -2,38 +2,6 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Client } from 'pg'
 
-function parseEnvFile(p) {
-  try {
-    const c = readFileSync(p, 'utf-8')
-    const out = {}
-    c.split(/\r?\n/)
-      .filter((l) => l && !l.trim().startsWith('#'))
-      .forEach((line) => {
-        const i = line.indexOf('=')
-        if (i > 0) {
-          const k = line.slice(0, i).trim()
-          let v = line.slice(i + 1).trim()
-          if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1)
-          out[k] = v
-        }
-      })
-    return out
-  } catch {
-    return {}
-  }
-}
-
-function cfgFrom(obj) {
-  if (obj.DATABASE_URL) return { connectionString: obj.DATABASE_URL }
-  return {
-    host: obj.PG_HOST || 'localhost',
-    port: Number(obj.PG_PORT || 5432),
-    user: obj.PG_USER,
-    password: obj.PG_PASSWORD || '',
-    database: obj.PG_DB_NAME || obj.PG_DB,
-  }
-}
-
 async function ensure(client) {
   await client.query(`CREATE TABLE IF NOT EXISTS connectors (
     id SERIAL PRIMARY KEY,
@@ -64,9 +32,20 @@ async function ensure(client) {
 
 async function main() {
   const baseDir = process.cwd()
-  const envLocal = parseEnvFile(join(baseDir, '.env'))
-  const cfg = cfgFrom(envLocal)
-  const client = new Client(cfg)
+  try {
+    const c = readFileSync(join(baseDir, '.env'), 'utf-8')
+    for (const line of c.split(/\r?\n/)) {
+      const m = line.match(/^([A-Z0-9_]+)=(.*)$/)
+      if (m) {
+        const k = m[1]
+        let v = m[2]
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1)
+        if (!process.env[k]) process.env[k] = v
+      }
+    }
+  } catch {}
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must be defined. No fallback allowed.')
+  const client = new Client({ connectionString: process.env.DATABASE_URL })
   await client.connect()
   await ensure(client)
   const res = await client.query("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='public' ORDER BY tablename")

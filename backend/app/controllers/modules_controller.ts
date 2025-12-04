@@ -2,6 +2,24 @@ import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import ModuleService from '#services/module_service'
 
+async function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)) }
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 400): Promise<T> {
+  let last: any
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn() } catch (e: any) {
+      last = e
+      const msg = String((e && e.message) || e)
+      const code = (e && e.code) || ''
+      if (msg.includes('ECONNRESET') || String(code).toUpperCase() === 'ECONNRESET') {
+        await sleep(delayMs + i * 200)
+        continue
+      }
+      throw e
+    }
+  }
+  throw last
+}
+
 export default class ModulesController {
   public async list({ auth, response }: HttpContext) {
     try {
@@ -64,35 +82,83 @@ export default class ModulesController {
   }
 
   public async userModules({ request, response }: HttpContext) {
-    const email = String(request.qs().email || '').trim().toLowerCase()
-    if (!email) return response.badRequest({ error: 'email_required' })
+    try {
+      const emailParam = request.input('email') ?? (request.qs() as any)?.email
+      const email = String(emailParam || '').trim().toLowerCase()
+      if (!email) return response.badRequest({ error: 'email_required' })
 
-    const userRow: any = await db.from('users').whereRaw('LOWER(email) = ?', [email]).select('id', 'modules').first()
-    if (!userRow?.id) return response.ok({ modules: [] })
+      const user: any = await withRetry(() => db
+        .from('users')
+        .whereRaw('LOWER(email) = ?', [email])
+        .select('id')
+        .first())
 
-    const canonical = (raw: string): string => {
-      const s = (raw || '').toString().trim().toLowerCase()
-      if (s === 'connecte' || s === 'commercial') return 'commercial'
-      if (s === 'planifie' || s === 'plannifie' || s === 'planifi') return 'planifi'
-      if (s === 'create' || s === 'crée' || s === 'cree') return 'cree'
-      if (s === 'publie' || s === 'publish') return 'publie'
-      return s
+      if (!user?.id) return response.ok({ user_id: null, email, modules: [] })
+
+      const allModules: Array<{ id: number; name: string }> = await withRetry(() => db
+        .from('modules')
+        .select('id', 'name')
+        .orderBy('name', 'asc'))
+
+      // Detect column shape for user_modules
+      const colsRes: any = await withRetry(() => db
+        .from('information_schema.columns')
+        .where('table_schema', 'public')
+        .andWhere('table_name', 'user_modules')
+        .select('column_name'))
+
+      const cols = new Set<string>((colsRes || []).map((r: any) => String(r.column_name)))
+
+      let modules: Array<{ id: string; module_name: string; display_name: string; is_active: boolean }> = []
+      if (cols.has('module_id')) {
+        const activeRows: Array<{ module_id: number }> = await withRetry(() => db
+          .from('user_modules')
+          .where('user_id', user.id)
+          .select('module_id'))
+        const activeSet = new Set<string>((activeRows || []).map((r) => String(r.module_id)))
+        modules = (allModules || []).map((m) => ({
+          id: String(m.id),
+          module_name: String(m.name),
+          display_name: String(m.name),
+          is_active: activeSet.has(String(m.id)),
+        }))
+      } else if (cols.has('module_key')) {
+        const canonical = (raw: string): string => {
+          const s = (raw || '').toString().trim().toLowerCase()
+          if (s === 'connecte' || s === 'commercial') return 'commercial'
+          if (s === 'planifie' || s === 'plannifie' || s === 'planifi') return 'planifi'
+          if (s === 'create' || s === 'crée' || s === 'cree') return 'cree'
+          if (s === 'publie' || s === 'publish') return 'publie'
+          return s
+        }
+        const activeRows: Array<{ module_key: string }> = await withRetry(() => db
+          .from('user_modules')
+          .where('user_id', user.id)
+          .select('module_key'))
+        const activeSet = new Set<string>((activeRows || []).map((r) => canonical(String(r.module_key))))
+        modules = (allModules || []).map((m) => {
+          const slug = canonical(String(m.name))
+          return {
+            id: String(m.id),
+            module_name: String(m.name),
+            display_name: String(m.name),
+            is_active: activeSet.has(slug),
+          }
+        })
+      } else {
+        // Fallback: no known columns, return all inactive
+        modules = (allModules || []).map((m) => ({
+          id: String(m.id),
+          module_name: String(m.name),
+          display_name: String(m.name),
+          is_active: false,
+        }))
+      }
+
+      return response.ok({ user_id: user.id, email, modules })
+    } catch (error) {
+      return response.ok({ user_id: null, email: String((request.input('email') ?? (request.qs() as any)?.email) || '').trim().toLowerCase(), modules: [], error: 'modules_fetch_failed', details: (error as any)?.message || 'unknown' })
     }
-
-    const rows: any[] = await db
-      .from('user_modules')
-      .join('modules', 'user_modules.module_id', 'modules.id')
-      .where('user_modules.user_id', userRow.id)
-      .select('modules.name', 'user_modules.is_active')
-
-    const modules = rows.map((r) => {
-      const raw = String(r.name)
-      const name = canonical(raw)
-      const enabled = !!(r.is_active ?? true)
-      return { module_name: name, enabled, is_active: enabled, status: enabled ? 'active' : 'inactive' }
-    })
-
-    return response.ok({ modules })
   }
 
   public async dbOverview({ auth, response }: HttpContext) {
@@ -118,16 +184,20 @@ export default class ModulesController {
 
   public async publicModules({ response }: HttpContext) {
     try {
-      const rows: Array<{ id: number; name: string; slug?: string; icon?: string; description?: string }> = await db
+      const rows: Array<{ id: number; name: string }> = await db
         .from('modules')
-        .select('id', 'name', 'slug', 'icon', 'description')
+        .select('id', 'name')
 
-      const pricingRows: Array<{ key: string; price_monthly?: number }> = await db
-        .from('pricing')
-        .where('type', 'module')
-        .select('key', 'price_monthly')
-
-      const priceMap = new Map<string, number>(pricingRows.map((p) => [String(p.key).toLowerCase(), Number(p.price_monthly || 150)]))
+      let priceMap = new Map<string, number>()
+      try {
+        const pricingRows: Array<{ key: string; price_monthly?: number }> = await db
+          .from('pricing')
+          .where('type', 'module')
+          .select('key', 'price_monthly')
+        priceMap = new Map<string, number>(pricingRows.map((p) => [String(p.key).toLowerCase(), Number(p.price_monthly || 150)]))
+      } catch {
+        priceMap = new Map<string, number>()
+      }
       const canonical = (raw: string): string => {
         const s = String(raw || '').trim().toLowerCase()
         if (s === 'connecte' || s === 'commercial') return 'commercial'
@@ -137,17 +207,18 @@ export default class ModulesController {
         return s
       }
 
-      const modules = rows.map((m) => {
-        const slug = canonical(m.slug || m.name)
+      const modulesRaw = rows.map((m) => {
+        const slug = canonical(m.name)
+        const moduleIcon = (['planifi','cree','publie','commercial'].includes(slug) ? `${slug}.webp` : `${slug}.png`)
         return {
           slug,
           name: m.name,
-          description: m.description || '',
+          description: '',
           price_monthly: priceMap.get(slug) || 150,
-          icon: m.icon || `${slug}.webp`,
+          icon: moduleIcon,
         }
       })
-
+      const modules = Array.from(new Map(modulesRaw.map((mm) => [String(mm.slug).toLowerCase(), mm])).values())
       return response.ok({ modules })
     } catch {
       return response.ok({ modules: [] })

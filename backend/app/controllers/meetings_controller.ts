@@ -2,6 +2,18 @@ import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 
 export default class MeetingsController {
+  public async listUser({ auth, response }: HttpContext) {
+    try {
+      const user = await auth.use('api').authenticate()
+      const rows: any = await db.raw(
+        'SELECT mn.* FROM meeting_notes mn LEFT JOIN projects p ON mn.project_id = p.id WHERE (p.user_id = $1 OR mn.project_id IS NULL) ORDER BY mn.created_at DESC LIMIT 50',
+        [Number(user.id)]
+      )
+      return response.ok({ notes: rows?.rows || [] })
+    } catch {
+      return response.unauthorized({ error: 'unauthenticated' })
+    }
+  }
   public async start({ auth, request, response }: HttpContext) {
     try {
       await auth.use('api').authenticate()

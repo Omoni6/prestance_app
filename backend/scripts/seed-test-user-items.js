@@ -24,7 +24,7 @@ function loadEnv(baseDir) {
 function cfgFromEnv() {
   if (process.env.DATABASE_URL) return { connectionString: process.env.DATABASE_URL }
   return {
-    host: process.env.PG_HOST || '127.0.0.1',
+    host: process.env.PG_HOST || 'localhost',
     port: Number(process.env.PG_PORT || 5432),
     user: process.env.PG_USER,
     password: process.env.PG_PASSWORD,
@@ -59,4 +59,3 @@ async function main() {
 }
 
 main().catch((e) => { console.error('error:', e.message); process.exit(1) })
-

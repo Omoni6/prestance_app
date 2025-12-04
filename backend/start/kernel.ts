@@ -27,6 +27,8 @@ export const middleware = router.named({
 })
 
 ;(async () => {
+  const isAce = String(process.argv[1] || '').toLowerCase().includes('ace')
+  if (isAce) return
   try {
     const tables = await db
       .from('information_schema.tables')
@@ -47,12 +49,24 @@ export const middleware = router.named({
   } catch (err) {
     console.error('DB overview failed', err)
   }
-  try {
-    const { default: CronService } = await import('#services/cron_service')
-    const cron = new CronService()
-    await cron.start()
-    console.info('⏱️ Cron service started')
-  } catch (err) {
-    console.error('Cron service failed to start', err)
-  }
+  // try {
+  //   const { default: CronService } = await import('#services/cron_service')
+  //   const cron = new CronService()
+  //   await cron.start()
+  //   console.info('⏱️ Cron service started')
+  // } catch (err) {
+  //   console.error('Cron service failed to start', err)
+  // }
 })()
+
+process.on('unhandledRejection', (err: any) => {
+  try {
+    console.error('unhandledRejection', err?.message || err)
+  } catch {}
+})
+
+process.on('uncaughtException', (err: any) => {
+  try {
+    console.error('uncaughtException', err?.message || err)
+  } catch {}
+})

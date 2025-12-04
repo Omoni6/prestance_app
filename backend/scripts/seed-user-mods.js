@@ -22,7 +22,7 @@ function loadEnv(baseDir) {
 
 function cfgFromEnv() {
   if (process.env.DATABASE_URL) return { connectionString: process.env.DATABASE_URL }
-  return { host: process.env.PG_HOST || '127.0.0.1', port: Number(process.env.PG_PORT || 5432), user: process.env.PG_USER, password: process.env.PG_PASSWORD, database: process.env.PG_DB_NAME || process.env.PG_DB }
+  return { host: process.env.PG_HOST || 'localhost', port: Number(process.env.PG_PORT || 5432), user: process.env.PG_USER, password: process.env.PG_PASSWORD, database: process.env.PG_DB_NAME || process.env.PG_DB }
 }
 
 async function ensureModule(client, key) {

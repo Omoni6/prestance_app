@@ -24,21 +24,15 @@ function parseEnvFile(p) {
 }
 
 function cfgFrom(obj) {
-  const get = (k) => (obj[k] ?? process.env[k])
-  return {
-    host: get('PG_HOST') || 'localhost',
-    port: Number(get('PG_PORT') || 5432),
-    user: get('PG_USER'),
-    password: typeof get('PG_PASSWORD') === 'string' ? get('PG_PASSWORD') : String(get('PG_PASSWORD') ?? ''),
-    database: get('PG_DB_NAME') || get('PG_DB'),
-  }
+  if (obj.DATABASE_URL) return { connectionString: obj.DATABASE_URL }
+  throw new Error('DATABASE_URL must be defined. No fallback allowed.')
 }
 
 async function main() {
   const baseDir = process.cwd()
-  const pathProd = join(baseDir, '.env.production')
-  const envProd = parseEnvFile(pathProd)
-  const cfg = cfgFrom(envProd)
+  const pathEnv = join(baseDir, '.env')
+  const envVars = parseEnvFile(pathEnv)
+  const cfg = cfgFrom(envVars)
   console.log('→ Connexion distante (VPS) à Postgres…')
   console.log('Config:', { host: cfg.host, port: cfg.port, user: cfg.user, database: cfg.database })
   const client = new Client(cfg)
@@ -59,4 +53,3 @@ main().catch((e) => {
   console.log('❌ Erreur connexion distante:', e.message)
   process.exit(1)
 })
-

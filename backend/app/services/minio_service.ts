@@ -1,9 +1,10 @@
 import { Client } from 'minio'
 import { randomBytes } from 'node:crypto'
 
-function env(key: string, fallback?: string) {
+function req(key: string) {
   const v = process.env[key]
-  return typeof v === 'string' && v.length ? v : (fallback ?? '')
+  if (!v) throw new Error(`Missing env ${key}`)
+  return v
 }
 
 export default class MinioService {
@@ -11,21 +12,18 @@ export default class MinioService {
   private bucket: string
 
   constructor() {
-    this.client = new Client({
-      endPoint: env('MINIO_ENDPOINT', '127.0.0.1'),
-      port: Number(env('MINIO_PORT', '9000')),
-      useSSL: env('MINIO_USE_SSL', 'false') === 'true',
-      accessKey: env('MINIO_ACCESS_KEY', ''),
-      secretKey: env('MINIO_SECRET_KEY', ''),
-    })
-    this.bucket = env('MINIO_BUCKET', 'omoni-bucket')
+    const endPoint = req('MINIO_ENDPOINT')
+    const port = Number(req('MINIO_PORT'))
+    const useSSL = req('MINIO_USE_SSL') === 'true'
+    const accessKey = req('MINIO_ACCESS_KEY')
+    const secretKey = req('MINIO_SECRET_KEY')
+    this.client = new Client({ endPoint, port, useSSL, accessKey, secretKey })
+    this.bucket = req('MINIO_BUCKET')
   }
 
   async ensureBucket() {
-    try {
-      const exists = await this.client.bucketExists(this.bucket)
-      if (!exists) await this.client.makeBucket(this.bucket, '')
-    } catch {}
+    const exists = await this.client.bucketExists(this.bucket)
+    if (!exists) await this.client.makeBucket(this.bucket, '')
   }
 
   async uploadFile(buffer: Buffer, path: string, filename?: string) {
@@ -34,17 +32,24 @@ export default class MinioService {
     const key = `${path.replace(/\/*$/, '')}/${name}`
     await this.client.putObject(this.bucket, key, buffer)
 
-    const proto = env('MINIO_USE_SSL', 'false') === 'true' ? 'https' : 'http'
-    const url = `${proto}://${env('MINIO_ENDPOINT', '127.0.0.1')}:${env('MINIO_PORT', '9000')}/${this.bucket}/${key}`
+    const proto = req('MINIO_USE_SSL') === 'true' ? 'https' : 'http'
+    const url = `${proto}://${req('MINIO_ENDPOINT')}:${req('MINIO_PORT')}/${this.bucket}/${key}`
     return { key, url }
   }
 
   async removeFile(key: string) {
-    try {
-      await this.client.removeObject(this.bucket, key)
-      return { success: true }
-    } catch {
-      return { success: false }
-    }
+    await this.client.removeObject(this.bucket, key)
+    return { success: true }
+  }
+
+  async downloadFile(key: string) {
+    const stream = await this.client.getObject(this.bucket, key)
+    const chunks: Buffer[] = []
+    await new Promise<void>((resolve, reject) => {
+      stream.on('data', (d: Buffer) => chunks.push(d))
+      stream.on('end', () => resolve())
+      stream.on('error', (e: any) => reject(e))
+    })
+    return Buffer.concat(chunks)
   }
 }

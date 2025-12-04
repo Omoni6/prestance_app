@@ -1,58 +1,59 @@
 /*
 |--------------------------------------------------------------------------
-| Routes file
+| Routes file — Version API v1
 |--------------------------------------------------------------------------
-|
-| The routes file is used for defining the HTTP routes.
-|
 */
 
 import router from '@adonisjs/core/services/router'
+import env from '#start/env'
 import { middleware } from '#start/kernel'
 import db from '@adonisjs/lucid/services/db'
 
-// Route de test
-router.get('/', async () => {
-  return {
-    message: 'Donna API is running!',
-    version: '1.0.0',
-    status: 'healthy',
-  }
-})
+/* ---------------------------------------------------------
+|   ROOT & HEALTH (non versionné)
+--------------------------------------------------------- */
 
-// Routes d'authentification
-  router
-    .group(() => {
-    // Public routes
+router.get('/', async () => ({
+  message: 'Donna API is running!',
+  version: '1.0.0',
+  status: 'healthy',
+}))
+
+router.get('/api/v1/health', async () => ({ status: 'ok' }))
+
+/* ---------------------------------------------------------
+|   API v1 — TOUTE TON API ICI
+--------------------------------------------------------- */
+
+router.group(() => {
+  /* --------------------------
+  | AUTH
+  -------------------------- */
+  router.group(() => {
     router.post('/signup', '#controllers/auth_controller.register')
     router.post('/login', '#controllers/auth_controller.login')
 
-    // Protected routes
     router.get('/me', '#controllers/auth_controller.me').use(middleware.auth({ guards: ['api'] }))
     router.post('/logout', '#controllers/auth_controller.logout').use(middleware.auth({ guards: ['api'] }))
+    router.delete('/delete-account', '#controllers/auth_controller.deleteAccount').use(middleware.auth({ guards: ['api'] }))
 
-    // Password reset routes (à implémenter plus tard)
-    // router.post('/forgot-password', '#controllers/auth_controller.forgotPassword')
-    // router.post('/reset-password', '#controllers/auth_controller.resetPassword')
-
-    // Google OAuth routes (flux simple via AuthController)
     router.get('/google/redirect', '#controllers/auth_controller.googleRedirect')
     router.get('/google/callback', '#controllers/auth_controller.googleCallback')
-  })
-  .prefix('/api/v1/auth')
+  }).prefix('/auth')
 
-router
-  .group(() => {
-    router
-      .get('/user/:id/stats', '#controllers/modules_controller.userStats')
-      .use(middleware.auth({ guards: ['api'] }))
+  /* --------------------------
+  | MODULES
+  -------------------------- */
+  router.group(() => {
+    router.get('/user/:id/stats', '#controllers/modules_controller.userStats').use(middleware.auth({ guards: ['api'] }))
     router.get('/user-modules', '#controllers/modules_controller.userModules')
     router.get('/db-overview', '#controllers/modules_controller.dbOverview').use(middleware.auth({ guards: ['api'] }))
-  })
-  .prefix('/api/v1/modules')
+  }).prefix('/modules')
 
-router
-  .group(() => {
+  /* --------------------------
+  | CORE APP ROUTES
+  -------------------------- */
+  router.group(() => {
     // Profile
     router.get('/profile', '#controllers/profile_controller.show').use(middleware.auth({ guards: ['api'] }))
     router.put('/profile', '#controllers/profile_controller.update').use(middleware.auth({ guards: ['api'] }))
@@ -66,6 +67,7 @@ router
     // Connectors
     router.get('/connectors', '#controllers/connectors_controller.list')
     router.get('/connectors/premium', '#controllers/connectors_controller.listPremium')
+
     router.post('/connectors/activate', '#controllers/connectors_controller.activate').use(middleware.auth({ guards: ['api'] }))
     router.post('/connectors/deactivate', '#controllers/connectors_controller.deactivate').use(middleware.auth({ guards: ['api'] }))
     router.post('/connectors/:key/config', '#controllers/connectors_controller.config').use(middleware.auth({ guards: ['api'] }))
@@ -75,20 +77,24 @@ router
     router.post('/calendar/events', '#controllers/calendar_controller.create').use(middleware.auth({ guards: ['api'] }))
     router.delete('/calendar/events/:id', '#controllers/calendar_controller.delete').use(middleware.auth({ guards: ['api'] }))
     router.get('/calendar/upcoming', '#controllers/calendar_controller.upcoming').use(middleware.auth({ guards: ['api'] }))
+
     // Meeting notes
     router.post('/meetings/notes/start', '#controllers/meetings_controller.start').use(middleware.auth({ guards: ['api'] }))
     router.post('/meetings/notes/:id/append', '#controllers/meetings_controller.append').use(middleware.auth({ guards: ['api'] }))
     router.post('/meetings/notes/:id/finish', '#controllers/meetings_controller.finish').use(middleware.auth({ guards: ['api'] }))
     router.post('/meetings/notes/:id/transcribe', '#controllers/meetings_controller.transcribe').use(middleware.auth({ guards: ['api'] }))
+    router.get('/meetings/notes', '#controllers/meetings_controller.listUser').use(middleware.auth({ guards: ['api'] }))
 
     // Projects
     router.get('/projects', '#controllers/projects_controller.list').use(middleware.auth({ guards: ['api'] }))
     router.post('/projects', '#controllers/projects_controller.create').use(middleware.auth({ guards: ['api'] }))
     router.put('/projects/:id', '#controllers/projects_controller.update').use(middleware.auth({ guards: ['api'] }))
     router.delete('/projects/:id', '#controllers/projects_controller.delete').use(middleware.auth({ guards: ['api'] }))
+
     router.get('/projects/:id/deliveries', '#controllers/deliveries_controller.list').use(middleware.auth({ guards: ['api'] }))
     router.post('/projects/:id/deliveries', '#controllers/deliveries_controller.create').use(middleware.auth({ guards: ['api'] }))
     router.post('/projects/:id/deliveries/:deliveryId/dispatch', '#controllers/deliveries_controller.dispatchOne').use(middleware.auth({ guards: ['api'] }))
+
     router.get('/deliveries', '#controllers/deliveries_controller.listUser').use(middleware.auth({ guards: ['api'] }))
 
     // Tasks
@@ -100,84 +106,90 @@ router
     router.post('/newsletter/campaigns', '#controllers/newsletter_controller.create').use(middleware.auth({ guards: ['api'] }))
     router.post('/newsletter/campaigns/:id/send', '#controllers/newsletter_controller.send').use(middleware.auth({ guards: ['api'] }))
 
-    // Admin
-    router.get('/admin/overview', '#controllers/admin_controller.overview').use(middleware.auth({ guards: ['api'] }))
-    router.get('/admin/subscribers', '#controllers/admin_controller.subscribers').use(middleware.auth({ guards: ['api'] }))
-    router.get('/admin/outbox', '#controllers/admin_controller.outbox').use(middleware.auth({ guards: ['api'] }))
-    router.get('/admin/endpoints', '#controllers/admin_controller.endpoints').use(middleware.auth({ guards: ['api'] }))
+    // Payments / Stripe
+    router.post('/payments/checkout', '#controllers/payments_controller.createCheckout').use(middleware.auth({ guards: ['api'] }))
+    router.post('/payments/webhook', '#controllers/payments_controller.handleWebhook')
+    router.get('/payments/subscription', '#controllers/payments_controller.getCurrentSubscription').use(middleware.auth({ guards: ['api'] }))
 
-    // Telegram
-    router.post('/telegram/webhook', '#controllers/telegram_controller.webhook')
-    router.post('/telegram/webhook/set', '#controllers/telegram_controller.setWebhook').use(middleware.auth({ guards: ['api'] }))
-    router.get('/telegram/webhook/info', '#controllers/telegram_controller.getWebhookInfo').use(middleware.auth({ guards: ['api'] }))
-    router.get('/telegram/updates', '#controllers/telegram_controller.getUpdates').use(middleware.auth({ guards: ['api'] }))
+    // Finance
+    router.get('/finance/summary', '#controllers/finance_controller.summary').use(middleware.auth({ guards: ['api'] }))
+    router.get('/finance/journal/today', '#controllers/finance_controller.journalToday').use(middleware.auth({ guards: ['api'] }))
+    router.get('/finance/pnl/month', '#controllers/finance_controller.pnlMonth').use(middleware.auth({ guards: ['api'] }))
+    router.post('/finance/entries', '#controllers/finance_controller.createEntry').use(middleware.auth({ guards: ['api'] }))
 
-    // Donna chat REST
+    // SMTP (user config)
+    router.post('/smtp/test', '#controllers/connectors_controller.testSmtp').use(middleware.auth({ guards: ['api'] }))
+
+    // Notifications
+    router.get('/notifications', '#controllers/notifications_controller.list').use(middleware.auth({ guards: ['api'] }))
+    router.post('/notifications/read', '#controllers/notifications_controller.markAsRead').use(middleware.auth({ guards: ['api'] }))
+
+    // Webhooks outbox
+    router.post('/webhooks/dispatch', '#controllers/webhooks_controller.dispatch')
+
+    // Uploads
+    router.post('/uploads', '#controllers/uploads_controller.upload').use(middleware.auth({ guards: ['api'] }))
+
+    // Donna chat + documents
     router.post('/donna/chat', '#controllers/donna_controller.chat').use(middleware.auth({ guards: ['api'] }))
     router.post('/donna/form/consultation', '#controllers/donna_controller.receiveConsultation')
     router.post('/donna/doc/process', '#controllers/donna_controller.processDocument').use(middleware.auth({ guards: ['api'] }))
 
-    // Onboarding
-    router.get('/onboarding', '#controllers/onboarding_controller.get').use(middleware.auth({ guards: ['api'] }))
-    router.post('/onboarding', '#controllers/onboarding_controller.save').use(middleware.auth({ guards: ['api'] }))
-    router.post('/onboarding/complete', '#controllers/onboarding_controller.complete').use(middleware.auth({ guards: ['api'] }))
-    router.post('/onboarding/upload', '#controllers/uploads_controller.uploadOnboarding').use(middleware.auth({ guards: ['api'] }))
+    // Realtime
+    router.post('/realtime/client-secret', '#controllers/realtime_controller.clientSecret').use(middleware.auth({ guards: ['api'] }))
 
     // Analytics
     router.get('/analytics/summary', '#controllers/analytics_controller.summary').use(middleware.auth({ guards: ['api'] }))
     router.get('/analytics/stats', '#controllers/analytics_controller.stats').use(middleware.auth({ guards: ['api'] }))
     router.get('/analytics/events', '#controllers/analytics_controller.events').use(middleware.auth({ guards: ['api'] }))
 
-    // Payments
-    router.post('/payments/checkout', '#controllers/payments_controller.createCheckout').use(middleware.auth({ guards: ['api'] }))
-    router.post('/payments/webhook', '#controllers/payments_controller.handleWebhook')
-    router.get('/payments/subscription', '#controllers/payments_controller.getCurrentSubscription').use(middleware.auth({ guards: ['api'] }))
+    // Logs
+    router.post('/logs/action', '#controllers/logs_controller.action').use(middleware.auth({ guards: ['api'] }))
 
-      // Notifications
-      router.get('/notifications', '#controllers/notifications_controller.list').use(middleware.auth({ guards: ['api'] }))
-      router.post('/notifications/read', '#controllers/notifications_controller.markAsRead').use(middleware.auth({ guards: ['api'] }))
+    // System Settings
+    router.get('/system-settings', '#controllers/system_settings_controller.get').use(middleware.auth({ guards: ['api'] }))
+    router.post('/system-settings', '#controllers/system_settings_controller.save').use(middleware.auth({ guards: ['api'] }))
 
-      // Webhooks Outbox
-      router.post('/webhooks/dispatch', '#controllers/webhooks_controller.dispatch')
-
-      // Uploads (normalized under /api/v1)
-      router.post('/uploads', '#controllers/uploads_controller.upload').use(middleware.auth({ guards: ['api'] }))
-
-      // Realtime client secret
-      router.post('/realtime/client-secret', '#controllers/realtime_controller.clientSecret').use(middleware.auth({ guards: ['api'] }))
-
-      // Media generation (queued)
-      router.post('/media/image', '#controllers/media_controller.createImage').use(middleware.auth({ guards: ['api'] }))
-      router.post('/media/video', '#controllers/media_controller.createVideo').use(middleware.auth({ guards: ['api'] }))
-      router.post('/publishing/calendar/prepare', '#controllers/publishing_controller.prepareCalendar').use(middleware.auth({ guards: ['api'] }))
-    })
-    .prefix('/api/v1')
-
-// Public, no-auth endpoints
-router
-  .group(() => {
-    router.get('/modules', '#controllers/modules_controller.publicModules')
+    // Gmail
+    router.get('/gmail/messages', '#controllers/gmail_controller.messages').use(middleware.auth({ guards: ['api'] }))
   })
-  .prefix('/api/public')
-router
-  .group(() => {
-    router.get('/modules/:key/connectors', '#controllers/connectors_controller.listByModule').use(middleware.auth({ guards: ['api'] }))
-    router.post('/modules/:key/activate', '#controllers/modules_controller.activate').use(middleware.auth({ guards: ['api'] }))
-    router.post('/modules/:key/deactivate', '#controllers/modules_controller.deactivate').use(middleware.auth({ guards: ['api'] }))
+}).prefix('/api/v1')
 
-    router.post('/connectors/:key/activate', '#controllers/user_connectors_controller.activate').use(middleware.auth({ guards: ['api'] }))
-    router.post('/connectors/:key/deactivate', '#controllers/user_connectors_controller.deactivate').use(middleware.auth({ guards: ['api'] }))
+/* ---------------------------------------------------------
+|   PUBLIC API (non versionné)
+--------------------------------------------------------- */
 
-    router.get('/pricing/modules', '#controllers/pricing_controller.listModules')
-    router.get('/pricing/connectors', '#controllers/pricing_controller.listConnectors')
-    router.get('/connectors/:key/redirect', '#controllers/connectors_controller.redirect')
-    router.get('/connectors/:key/callback', '#controllers/connectors_controller.callback')
-  })
-  .prefix('/api/v1')
+router.group(() => {
+  router.get('/modules', '#controllers/modules_controller.publicModules')
+}).prefix('/api/v1/public')
 
-// Dev-only utility to activate all modules for a user by email
+/* ---------------------------------------------------------
+|   EXISTING VERSIONNED PUBLIC ENDPOINTS
+--------------------------------------------------------- */
+
+router.group(() => {
+  router.get('/modules/:key/connectors', '#controllers/connectors_controller.listByModule').use(middleware.auth({ guards: ['api'] }))
+  router.post('/modules/:key/activate', '#controllers/modules_controller.activate').use(middleware.auth({ guards: ['api'] }))
+  router.post('/modules/:key/deactivate', '#controllers/modules_controller.deactivate').use(middleware.auth({ guards: ['api'] }))
+
+  router.post('/connectors/:key/activate', '#controllers/user_connectors_controller.activate').use(middleware.auth({ guards: ['api'] }))
+  router.post('/connectors/:key/deactivate', '#controllers/user_connectors_controller.deactivate').use(middleware.auth({ guards: ['api'] }))
+
+  router.get('/pricing/modules', '#controllers/pricing_controller.listModules')
+  router.get('/pricing/connectors', '#controllers/pricing_controller.listConnectors')
+
+  router.get('/connectors/:key/redirect', '#controllers/connectors_controller.redirect')
+  router.get('/connectors/:key/callback', '#controllers/connectors_controller.callback')
+
+  router.post('/slack/events', '#controllers/slack_events_controller.events')
+}).prefix('/api/v1')
+
+/* ---------------------------------------------------------
+|   DEV-ONLY
+--------------------------------------------------------- */
+
 if (process.env.NODE_ENV === 'development') {
-  router.post('/api/v1/dev/activate-all-modules', async ({ request, response }) => {
+  router.post('/api/dev/activate-all-modules', async ({ request, response }) => {
     const email = String(request.input('email') || '').trim().toLowerCase()
     if (!email) return response.badRequest({ error: 'email_required' })
     const userRow = await db.from('users').whereRaw('LOWER(email) = ?', [email]).select('id').first()
@@ -188,7 +200,8 @@ if (process.env.NODE_ENV === 'development') {
     } catch {}
     return response.ok({ success: true, email, activated: mods })
   })
-  router.post('/api/v1/dev/cleanup-modules', async ({ response }) => {
+
+  router.post('/api/dev/cleanup-modules', async ({ response }) => {
     const rows: any[] = await db.from('modules').select('id', 'name')
     const canonical = (raw: string): string => {
       const s = String(raw || '').trim().toLowerCase()
@@ -222,12 +235,13 @@ if (process.env.NODE_ENV === 'development') {
     const after: any[] = await db.from('modules').select('id', 'name').orderBy('name', 'asc')
     return response.ok({ success: true, changes, modules: after })
   })
-  router.post('/api/v1/dev/seed-module-connectors', async ({ response }) => {
+
+  router.post('/api/dev/seed-module-connectors', async ({ response }) => {
     const defaults: Record<string, { included: string[]; premium: string[] }> = {
-      planifi: { included: ['omoni_calendar','telegram','slack'], premium: ['gmail','calendly','smtp','google_calendar'] },
-      cree: { included: ['omoni_bucket','telegram','slack','nano_banana','sora2'], premium: ['suno','elevenlabs','notion','canva'] },
-      publie: { included: ['omoni_bucket','blotato'], premium: ['ticketmaster','n8n','spotify'] },
-      commercial: { included: ['omoni_crm','telegram','slack','omoni_calendar','hubspot'], premium: ['salesforce','whatsapp_business','twilio','lemonsqueezy'] },
+      planifi: { included: ['omoni_calendar','telegram','slack','google_calendar','google_meet','gmail'], premium: ['calendly','smtp'] },
+      cree: { included: ['omoni_bucket','telegram','slack','nano_banana','sora2','gmail'], premium: ['suno','elevenlabs','notion','canva','google_drive'] },
+      publie: { included: ['omoni_bucket','blotato','telegram','slack'], premium: ['ticketmaster','n8n','spotify'] },
+      commercial: { included: ['omoni_crm','telegram','slack','omoni_calendar','hubspot','gmail','google_meet'], premium: ['salesforce','whatsapp_business','twilio','lemonsqueezy','google_calendar'] },
     }
     const results: any[] = []
     for (const [mk, lists] of Object.entries(defaults)) {
@@ -248,7 +262,21 @@ if (process.env.NODE_ENV === 'development') {
     return response.ok({ seeded: results.length, results, counts: countsRes?.rows || [] })
   })
 
-  router.post('/api/v1/dev/test-upload', async ({ response }) => {
+  router.post('/api/dev/remove-connector', async ({ request, response }) => {
+    const code = String(request.input('code') || '').toLowerCase().trim()
+    if (!code) return response.badRequest({ error: 'code_required' })
+    try {
+      await db.raw('DELETE FROM user_connector_credentials WHERE LOWER(connector_code) = ?', [code])
+      await db.raw('DELETE FROM user_connectors WHERE LOWER(connector_code) = ?', [code])
+      await db.raw('DELETE FROM module_connectors WHERE LOWER(connector_code) = ?', [code])
+      await db.raw('DELETE FROM connectors WHERE LOWER(code) = ?', [code])
+      return response.ok({ success: true, removed: code })
+    } catch {
+      return response.internalServerError({ error: 'remove_failed' })
+    }
+  })
+
+  router.post('/api/dev/test-upload', async ({ response }) => {
     try {
       const { default: MinioService } = await import('#services/minio_service')
       const svc = new MinioService()
@@ -260,4 +288,3 @@ if (process.env.NODE_ENV === 'development') {
     }
   })
 }
-    

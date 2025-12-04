@@ -23,14 +23,10 @@ function parseEnvFile(p) {
   }
 }
 
-function cfg(obj) {
-  return {
-    host: obj.PG_HOST,
-    port: obj.PG_PORT || '5432',
-    user: obj.PG_USER,
-    password: obj.PG_PASSWORD,
-    db: obj.PG_DB_NAME || obj.PG_DB,
-  }
+function parseDatabaseUrl(url) {
+  const m = url.match(/^postgres:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^\s]+)$/)
+  if (!m) throw new Error('Invalid DATABASE_URL format')
+  return { user: m[1], password: m[2], host: m[3], port: m[4], db: m[5] }
 }
 
 function run(cmd, args, env) {
@@ -42,10 +38,9 @@ function run(cmd, args, env) {
 
 async function main() {
   const base = new URL('../', import.meta.url)
-  const envLocal = parseEnvFile(join(base.pathname, '.env'))
-  const envProd = parseEnvFile(join(base.pathname, '.env.production'))
-  const local = cfg(envLocal)
-  const vps = cfg(envProd)
+  const envVars = parseEnvFile(join(base.pathname, '.env'))
+  if (!envVars.DATABASE_URL) throw new Error('DATABASE_URL must be defined. No fallback allowed.')
+  const vps = parseDatabaseUrl(envVars.DATABASE_URL)
   if (!existsSync(join(base.pathname, 'tmp'))) mkdirSync(join(base.pathname, 'tmp'))
   const dumpPath = join(base.pathname, 'tmp', 'vps_dump.dump')
   console.log('⏳ Dump en cours…')
@@ -57,15 +52,7 @@ async function main() {
     process.exit(1)
   }
   console.log('📥 Pull terminé')
-  console.log('⏳ Restauration locale…')
-  const restoreCode = await run('pg_restore', ['-h', local.host || 'localhost', '-p', local.port || '5432', '-U', local.user, '-d', local.db, '--clean', '--if-exists', dumpPath], {
-    PGPASSWORD: local.password,
-  })
-  if (restoreCode !== 0) {
-    console.log('❌ Erreur pg_restore (local). Assurez-vous que pg_restore est installé et accessible.')
-    process.exit(1)
-  }
-  console.log('✔ Restauration locale OK')
+  console.log('✔ Dump VPS OK (aucune restauration locale)')
 }
 
 main().catch((e) => {

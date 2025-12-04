@@ -25,13 +25,7 @@ function parseEnvFile(p) {
 
 function cfgFrom(obj) {
   if (obj.DATABASE_URL) return { connectionString: obj.DATABASE_URL }
-  return {
-    host: obj.PG_HOST || 'localhost',
-    port: Number(obj.PG_PORT || 5432),
-    user: obj.PG_USER,
-    password: obj.PG_PASSWORD || '',
-    database: obj.PG_DB_NAME || obj.PG_DB,
-  }
+  throw new Error('DATABASE_URL must be defined. No fallback allowed.')
 }
 
 async function main() {

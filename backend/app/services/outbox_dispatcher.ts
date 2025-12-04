@@ -33,9 +33,27 @@ export default class OutboxDispatcher {
               const to = String(dbUser?.email || '')
               if (to) {
                 const text = `Un livrable est prêt (ID ${payload.delivery_id||''}).` + (payload.url ? `\n${payload.url}` : '')
+                const row: any = await db.from('project_deliveries').where('id', Number(payload.delivery_id||0)).select('storage_key','title','type').first()
                 const { default: MailService } = await import('#services/mail_service')
                 const ms = new MailService()
-                await ms.send(to, 'Votre livrable', text)
+                const attachments: Array<{ filename: string; mime: string; content: Buffer }> = []
+                const storageKey = String(row?.storage_key || '')
+                if (storageKey) {
+                  try {
+                    const { default: MinioService } = await import('#services/minio_service')
+                    const svc = new MinioService()
+                    const buf = await svc.downloadFile(storageKey)
+                    if (buf) {
+                      const fname = storageKey.split('/').pop() || 'livrable'
+                      const ext = (fname.split('.').pop() || '').toLowerCase()
+                      const mimeMap: Record<string,string> = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', webm:'audio/webm', mp4:'video/mp4', pdf:'application/pdf', docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document', txt:'text/plain' }
+                      const mime = mimeMap[ext] || 'application/octet-stream'
+                      attachments.push({ filename: fname, mime, content: buf })
+                    }
+                  } catch {}
+                }
+                if (attachments.length) await ms.sendWithAttachments(to, String(row?.title || 'Votre livrable'), text, attachments)
+                else await ms.send(to, String(row?.title || 'Votre livrable'), text)
               }
             } catch {}
           }

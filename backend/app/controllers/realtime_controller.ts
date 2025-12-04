@@ -8,7 +8,6 @@ export default class RealtimeController {
       if (!apiKey) return response.badRequest({ error: 'missing_openai_api_key' })
       console.log('realtime: OPENAI key present')
       const voice = String(request.input('voice') || request.qs().voice || 'verse')
-      const language = String(request.input('language') || request.qs().lang || 'fr-FR')
       const instructions = String(request.input('instructions') || '').trim()
       const body = {
         session: {

@@ -50,7 +50,8 @@ export default class ModuleService {
         userCons = (await db.rawQuery('SELECT connector_code FROM user_connectors WHERE user_id = $1', [userId])).rows || []
       } catch { userCons = [] }
     }
-    const uSet = new Set<string>(userCons.map((r: any) => String(r.connector_code || r.connector_id)))
+    const norm = (s: string) => String(s || '').toLowerCase().replace(/-/g, '_')
+    const uSet = new Set<string>(userCons.map((r: any) => norm(String(r.connector_code || r.connector_id))))
     const connMap = new Map<string, ConnectorRow>(connectors.map((c: any) => [String(c.code), { id: c.id, code: String(c.code), name: String(c.code), is_premium: false }]))
 
     const grouped: Record<string, { included: ConnectorEntry[]; premium: ConnectorEntry[] }> = {}
@@ -62,7 +63,7 @@ export default class ModuleService {
       const c = connMap.get(cc)
       if (!c) continue
       if (!grouped[mk]) grouped[mk] = { included: [], premium: [] }
-      const base: ConnectorEntry = { code: c.code, name: c.name || c.code, icon: `/icons/${c.code}.png`, connected: uSet.has(c.code) }
+      const base: ConnectorEntry = { code: c.code, name: c.name || c.code, connected: uSet.has(norm(c.code)) }
       if (inc) grouped[mk].included.push(base)
       else grouped[mk].premium.push(base)
     }
@@ -84,37 +85,47 @@ export default class ModuleService {
       const prem = parseList(premRaw)
       if (inc.length || prem.length) {
         if (!grouped[key]) grouped[key] = { included: [], premium: [] }
-        grouped[key].included = inc.map((code) => ({ code, name: code, icon: `/icons/${code}.png`, connected: uSet.has(code) }))
-        grouped[key].premium = prem.map((code) => ({ code, name: code, icon: `/icons/${code}.png`, connected: uSet.has(code) }))
+        grouped[key].included = inc.map((code) => ({ code, name: code, connected: uSet.has(norm(code)) }))
+        grouped[key].premium = prem.map((code) => ({ code, name: code, connected: uSet.has(norm(code)) }))
+        // Ensure google_meet present for planifi/commercial
+        if ((key === 'planifi' || key === 'commercial') && !grouped[key].included.find((c) => c.code === 'google_meet')) {
+          grouped[key].included.push({ code: 'google_meet', name: 'google_meet', connected: uSet.has('google_meet') })
+        }
       }
     }
 
     // Fallback mapping when database lacks module_connector entries
     const defaults: Record<string, { included: string[]; premium: string[] }> = {
-      planifi: { included: ['omoni_calendar','telegram','slack'], premium: ['gmail','calendly','smtp','google_calendar','google_drive'] },
-      cree: { included: ['omoni_bucket','telegram','slack','nano_banana','sora2'], premium: ['suno','elevenlabs','notion','canva','google_drive'] },
-      publie: { included: ['omoni_bucket','blotato'], premium: ['ticketmaster','n8n','spotify','google_drive'] },
-      commercial: { included: ['omoni_crm','telegram','slack','omoni_calendar','hubspot','google_drive'], premium: ['salesforce','whatsapp_business','twilio','lemonsqueezy','google_drive'] },
+      planifi: { included: ['omoni_calendar','telegram','slack','google_meet'], premium: ['gmail','smtp','google_calendar','google_drive'] },
+      cree: { included: ['omoni_bucket','telegram','slack','nano_banana','sora2','gmail'], premium: ['suno','elevenlabs','google_drive'] },
+      publie: { included: ['omoni_bucket','telegram','slack'], premium: ['ticketmaster','n8n','spotify','google_drive'] },
+      commercial: { included: ['omoni_crm','telegram','slack','omoni_calendar','hubspot','gmail','google_meet'], premium: ['salesforce','whatsapp_business','lemonsqueezy','google_calendar'] },
     }
     for (const key of Object.keys(defaults)) {
       if (!grouped[key]) grouped[key] = { included: [], premium: [] }
       if (grouped[key].included.length === 0) {
-        grouped[key].included = defaults[key].included.map((code) => ({ code, name: code, icon: `/icons/${code}.png`, connected: uSet.has(code) }))
+        grouped[key].included = defaults[key].included.map((code) => ({ code, name: code, connected: uSet.has(norm(code)) }))
       }
       if (grouped[key].premium.length === 0) {
-        grouped[key].premium = defaults[key].premium.map((code) => ({ code, name: code, icon: `/icons/${code}.png`, connected: uSet.has(code) }))
+        grouped[key].premium = defaults[key].premium.map((code) => ({ code, name: code, connected: uSet.has(norm(code)) }))
       }
     }
 
     const premiumAll: any[] = []
 
+    const iconMap: Record<string, string> = {
+      planifi: '/icons/planifi.webp',
+      cree: '/icons/cree.webp',
+      publie: '/icons/publie.webp',
+      commercial: '/icons/commercial.webp',
+    }
     const raw = modules.map((m) => {
       const key = canonical(m.slug || m.name)
       return {
         key,
         name: m.name,
         slug: m.slug || key,
-        icon: m.icon || '',
+        icon: m.icon || iconMap[key] || '',
         description: m.description || '',
         active: activeSet.has(key),
         price_monthly: priceMap.get(key) || 150,

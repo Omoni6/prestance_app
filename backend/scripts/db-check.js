@@ -2,38 +2,6 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Client } from 'pg'
 
-function parseEnvFile(p) {
-  try {
-    const c = readFileSync(p, 'utf-8')
-    const out = {}
-    c.split(/\r?\n/)
-      .filter((l) => l && !l.trim().startsWith('#'))
-      .forEach((line) => {
-        const i = line.indexOf('=')
-        if (i > 0) {
-          const k = line.slice(0, i).trim()
-          let v = line.slice(i + 1).trim()
-          if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1)
-          out[k] = v
-        }
-      })
-    return out
-  } catch {
-    return {}
-  }
-}
-
-function cfgFrom(obj) {
-  const get = (k) => (obj[k] ?? process.env[k])
-  return {
-    host: get('PG_HOST') || 'localhost',
-    port: Number(get('PG_PORT') || 5432),
-    user: get('PG_USER'),
-    password: typeof get('PG_PASSWORD') === 'string' ? get('PG_PASSWORD') : String(get('PG_PASSWORD') ?? ''),
-    database: get('PG_DB_NAME') || get('PG_DB'),
-  }
-}
-
 async function fetchSchema(client) {
   const tables = await client.query(
     "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name"
@@ -89,53 +57,26 @@ function diffSchemas(local, remote) {
 
 async function main() {
   const baseDir = process.cwd()
-  const pathLocal = join(baseDir, '.env')
-  const pathProd = join(baseDir, '.env.production')
-  console.log('Paths:', { local: pathLocal, prod: pathProd })
-  const envLocal = parseEnvFile(pathLocal)
-  const envProd = parseEnvFile(pathProd)
-  const cfgLocal = cfgFrom(envLocal)
-  const cfgRemote = cfgFrom(envProd)
-  console.log('⏳ Vérification schéma local vs VPS...')
-  console.log('Local cfg:', { host: cfgLocal.host, port: cfgLocal.port, user: cfgLocal.user, password_type: typeof cfgLocal.password, database: cfgLocal.database })
-  let lc, rc
+  const envPath = join(baseDir, '.env')
   try {
-    lc = new Client(cfgLocal)
-    await lc.connect()
-  } catch (e) {
-    console.log('❌ Connexion locale échouée:', e.message)
-    process.exit(1)
-  }
-  try {
-    rc = new Client(cfgRemote)
-    await rc.connect()
-  } catch (e) {
-    console.log('❌ Erreur connexion VPS:', e.message)
-    await lc.end()
-    process.exit(1)
-  }
-  try {
-    const lschema = await fetchSchema(lc)
-    const rschema = await fetchSchema(rc)
-    const diff = diffSchemas(lschema, rschema)
-    if (!diff.tablesOnlyLocal.length && !diff.tablesOnlyRemote.length && !diff.colDiffs.length && !diff.pkDiffs.length) {
-      console.log('✔ Migration sync OK')
-    } else {
-      console.log('⚠ Différences détectées')
-      if (diff.tablesOnlyLocal.length) console.log('Tables uniquement local:', diff.tablesOnlyLocal.join(', '))
-      if (diff.tablesOnlyRemote.length) console.log('Tables uniquement VPS:', diff.tablesOnlyRemote.join(', '))
-      for (const d of diff.colDiffs) {
-        console.log(`Table ${d.table}`)
-        if (d.added.length) console.log('  Colonnes ajoutées (VPS):', d.added.join(', '))
-        if (d.removed.length) console.log('  Colonnes manquantes (VPS):', d.removed.join(', '))
-        for (const c of d.changed) console.log(`  Changement ${c.name}: local(${c.local.type}, nullable=${c.local.nullable}) vs vps(${c.remote.type}, nullable=${c.remote.nullable})`)
+    const c = readFileSync(envPath, 'utf-8')
+    for (const line of c.split(/\r?\n/)) {
+      const m = line.match(/^([A-Z0-9_]+)=(.*)$/)
+      if (m) {
+        const k = m[1]
+        let v = m[2]
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1)
+        if (!process.env[k]) process.env[k] = v
       }
-      for (const p of diff.pkDiffs) console.log(`PK ${p.table}: local(${p.local.join(',')}) vs vps(${p.remote.join(',')})`)
     }
-  } finally {
-    await lc.end()
-    await rc.end()
-  }
+  } catch {}
+  const url = process.env.DATABASE_URL
+  if (!url) throw new Error('DATABASE_URL must be defined. No fallback allowed.')
+  const client = new Client({ connectionString: url })
+  await client.connect()
+  const schema = await fetchSchema(client)
+  console.log('✔ Schéma (VPS) tables:', schema.tables)
+  await client.end()
 }
 
 main().catch((e) => {

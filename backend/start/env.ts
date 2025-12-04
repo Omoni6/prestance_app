@@ -30,7 +30,6 @@ function loadEnvFile(rel: string) {
             v = v.slice(1, -1)
           }
           if (!process.env[k]) process.env[k] = v
-          if (k === 'PG_DB' && !process.env['PG_DB_NAME']) process.env['PG_DB_NAME'] = v
         }
       })
   } catch {}
@@ -50,11 +49,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   | Variables for configuring database connection
   |----------------------------------------------------------
   */
-  PG_HOST: Env.schema.string({ format: 'host' }),
-  PG_PORT: Env.schema.number(),
-  PG_USER: Env.schema.string(),
-  PG_PASSWORD: Env.schema.string.optional(),
-  PG_DB_NAME: Env.schema.string(),
+  DATABASE_URL: Env.schema.string(),
 
   /*
   |----------------------------------------------------------
